@@ -1,0 +1,5 @@
+/_ReSharper.iismanager
+/iismanager/obj
+/iismanager/bin
+/iismanager/*.user
+/*.suo
