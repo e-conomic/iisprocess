@@ -17,7 +17,6 @@ namespace iismanager
 
 		static void Main(string[] args)
 		{
-			Console.Clear();
 			Console.CancelKeyPress += ConsoleCancel;
 
 			string siteName = "";
