@@ -64,6 +64,7 @@ namespace iismanager
 			_newSite.ServerAutoStart = true;
 			_newSite.Applications[0].ApplicationPoolName = siteName;
 			serverManager.CommitChanges();
+			System.Threading.Thread.Sleep(500);
 			_newSite.Start();
 
 			do
