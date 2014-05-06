@@ -1,4 +1,4 @@
 iismanager
 ==========
 
-Used by hms to start and monitor an iis site
+A windows console program used to create and monitor an iis site
