@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Linq;
 using Mono.Options;
 using Microsoft.Web.Administration;
@@ -49,7 +50,7 @@ namespace iismanager
 				return;
 			}
 
-			string currentPath = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+            string currentPath = Directory.GetCurrentDirectory();
 			
 			var serverManager = new ServerManager();
 			if (serverManager.ApplicationPools.Any(ap => ap.Name == siteName))
