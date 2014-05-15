@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using Mono.Options;
 using Microsoft.Web.Administration;
 
@@ -9,16 +10,30 @@ namespace iismanager
 	class Program
 	{
 		private static Site _newSite;
+		[DllImport("Kernel32")]
+		public static extern bool SetConsoleCtrlHandler(HandlerRoutine Handler, bool Add);
+		public delegate bool HandlerRoutine(CtrlTypes CtrlType);
 
-		protected static void ConsoleCancel(object sender, ConsoleCancelEventArgs args)
+		public enum CtrlTypes
+		{
+			CTRL_C_EVENT = 0,
+			CTRL_BREAK_EVENT = 1,
+			CTRL_CLOSE_EVENT = 2,
+			CTRL_LOGOFF_EVENT = 5,
+			CTRL_SHUTDOWN_EVENT = 6
+		}
+
+		private static bool ConsoleCtrlCheck(CtrlTypes ctrlType)
 		{
 			if (_newSite != null)
 				_newSite.Stop();
+
+			return true;
 		}
 
 		static void Main(string[] args)
 		{
-			Console.CancelKeyPress += ConsoleCancel;
+			SetConsoleCtrlHandler(ConsoleCtrlCheck, true);
 
 			string siteName = "";
 			int port = -1;
