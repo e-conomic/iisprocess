@@ -7,8 +7,8 @@
     <ProjectGuid>{042F59AE-A9E0-4FCF-896C-6524A997BAFE}</ProjectGuid>
     <OutputType>Exe</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>iismanager</RootNamespace>
-    <AssemblyName>iismanager</AssemblyName>
+    <RootNamespace>iisprocess</RootNamespace>
+    <AssemblyName>iisprocess</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <FodyPath>..\packages\Fody.1.14.0</FodyPath>
