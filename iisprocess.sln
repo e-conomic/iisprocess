@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2012
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "iismanager", "iismanager\iismanager.csproj", "{042F59AE-A9E0-4FCF-896C-6524A997BAFE}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "iisprocess", "iisprocess\iisprocess.csproj", "{042F59AE-A9E0-4FCF-896C-6524A997BAFE}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 using Mono.Options;
 using Microsoft.Web.Administration;
 
-namespace iismanager
+namespace iisprocess
 {
 	class Program
 	{
