@@ -76,7 +76,7 @@ namespace iisprocess
         private static Process SpawnChildProcess(int parentPID, string siteName)
         {
             string filename = System.Reflection.Assembly.GetEntryAssembly().Location;
-            string args = String.Format("-w {0} -s {1} {2}", parentPID, siteName, debug ? "-d" : "");
+            string args = String.Format("-w {0} -n {1} {2}", parentPID, siteName, debug ? "-d" : "");
             Debug("Spawning process: {0} {1}", filename, args);
             var pinfo = new ProcessStartInfo(filename, args);
             pinfo.CreateNoWindow = true;
@@ -113,9 +113,17 @@ namespace iisprocess
         private static void StopSite(string siteName)
         {
             var serverManager = new ServerManager();
-        
-            var site = serverManager.Sites.First(si => si.Name == siteName);
-            site.Stop();
+
+            try
+            {
+                var site = serverManager.Sites.First(si => si.Name == siteName);
+                Debug("Stopping site {0}", siteName);
+                site.Stop();
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("Unable to stop site {0}: {1}", siteName, e.Message);
+            }
         }
 
         private static void WatchSite(Site site) {
@@ -140,14 +148,17 @@ namespace iisprocess
 			int port = -1;
 			string framework = "v4.0";
 			bool showHelp = false;
+            bool stop = false;
             int parentPID = -1;
 
 			var p = new OptionSet {
-            { "s|site=", "name of the iis site",
+            { "n|name=", "name of the IIS site",
               v => siteName = v},
+            { "s|stop", "stop the IIS site",
+              v => stop = true},
             { "p|port=", "port used by the iis site",
               (int v) => port = v},
-            { "f|framework=", "framework used by the iis site: v2.0 or v4.0 (default)",
+            { "f|framework=", "framework version used by the application pool: v2.0 or v4.0 (default)",
               v => framework = v},
             { "h|help",  "show this message and exit", 
               v => showHelp = true },
@@ -166,13 +177,18 @@ namespace iisprocess
 				p.WriteOptionDescriptions(Console.Out);
 				return;
 			}
-            Debug("Starting....");
 
 			if (showHelp || siteName == "")
 			{
 				p.WriteOptionDescriptions(Console.Out);
 				return;
 			}
+
+            if (stop)
+            {
+                StopSite(siteName);
+                return;
+            }
 
             if (parentPID > 0)
             {
