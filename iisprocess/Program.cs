@@ -45,18 +45,19 @@ namespace iisprocess
             }
         }
 
-        private static Site CreateSite(string siteName, string framework, string path, int port) {
+        private static Site CreateSite(string siteName, string framework, string path, int port, ProcessModelIdentityType identityType) {
             var serverManager = new ServerManager();
             if (serverManager.ApplicationPools.Any(ap => ap.Name == siteName)) {
                 Debug("Removing existing AppPool {0}", siteName);
                 serverManager.ApplicationPools.Remove(serverManager.ApplicationPools.Single(ap => ap.Name == siteName));
             }
 
-            Debug("Creating new AppPool {0}, Framework={1}", siteName, framework);
+            Debug("Creating new AppPool {0}, Framework={1}, IdentityType={2}", siteName, framework, identityType);
     
             var applicationPool = serverManager.ApplicationPools.Add(siteName);
             applicationPool.ManagedRuntimeVersion = framework;
             applicationPool.Enable32BitAppOnWin64 = true;
+            applicationPool.ProcessModel.IdentityType = identityType;
 
             if (serverManager.Sites.Any(si => si.Name == siteName)) {
                 Debug("Removing existing site {0}", siteName);
@@ -76,14 +77,16 @@ namespace iisprocess
 
         private static Process SpawnChildProcess(int parentPID, string siteName)
         {
-            string filename = System.Reflection.Assembly.GetEntryAssembly().Location;
-            string args = String.Format("-w {0} -n {1} {2}", parentPID, siteName, debug ? "-d" : "");
+            var filename = System.Reflection.Assembly.GetEntryAssembly().Location;
+            var args = String.Format("-w {0} -n {1} {2}", parentPID, siteName, debug ? "-d" : "");
             Debug("Spawning process: {0} {1}", filename, args);
-            var pinfo = new ProcessStartInfo(filename, args);
-            pinfo.CreateNoWindow = true;
-            pinfo.UseShellExecute = false;
-            pinfo.RedirectStandardOutput = true;
-           
+            var pinfo = new ProcessStartInfo(filename, args)
+            {
+                CreateNoWindow = true,
+                UseShellExecute = false,
+                RedirectStandardOutput = true
+            };
+
             var p = Process.Start(pinfo);
             p.OutputDataReceived += (sender, a) => Console.WriteLine(a.Data);
             p.BeginOutputReadLine();
@@ -145,12 +148,13 @@ namespace iisprocess
 		{
 			SetConsoleCtrlHandler(ConsoleCtrlCheck, true);
 
-			string siteName = "";
-			int port = -1;
-			string framework = "v4.0";
-			bool showHelp = false;
-            bool stop = false;
-            int parentPID = -1;
+			var siteName = "";
+			var port = -1;
+			var framework = "v4.0";
+			var showHelp = false;
+            var stop = false;
+            var parentPID = -1;
+            var identityType = ProcessModelIdentityType.ApplicationPoolIdentity;
 
 			var p = new OptionSet {
             { "n|name=", "name of the IIS site",
@@ -165,6 +169,16 @@ namespace iisprocess
               v => showHelp = true },
             { "d|debug",  "output debug messages", 
               v => debug = true },
+            { "i|identity=",  "The IdentityType to use for Application pool",
+                i =>
+                    {
+                    if (!ProcessModelIdentityType.TryParse(i, true, out identityType))
+                        {
+                        Console.Error.WriteLine("Cannot parse identity: {0}", i);
+                            throw new ArgumentException("identity");
+                        }   
+                    }
+            },
             { "w|watch=",  "watch the process with PID specified", 
               (int v) => parentPID = v }
 			};
@@ -206,7 +220,7 @@ namespace iisprocess
 
             string currentPath = Directory.GetCurrentDirectory();
 
-	        _newSite = CreateSite(siteName, framework, currentPath, port);
+	        _newSite = CreateSite(siteName, framework, currentPath, port, identityType);
             SpawnChildProcess(Process.GetCurrentProcess().Id, siteName);
             WatchSite(_newSite);
 		}
