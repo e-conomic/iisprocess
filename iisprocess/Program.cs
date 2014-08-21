@@ -75,45 +75,6 @@ namespace iisprocess
             return newSite;
         }
 
-        private static Process SpawnChildProcess(int parentPID, string siteName)
-        {
-            var filename = System.Reflection.Assembly.GetEntryAssembly().Location;
-            var args = String.Format("-w {0} -n {1} {2}", parentPID, siteName, debug ? "-d" : "");
-            Debug("Spawning process: {0} {1}", filename, args);
-            var pinfo = new ProcessStartInfo(filename, args)
-            {
-                CreateNoWindow = true,
-                UseShellExecute = false,
-                RedirectStandardOutput = true
-            };
-
-            var p = Process.Start(pinfo);
-            p.OutputDataReceived += (sender, a) => Console.WriteLine(a.Data);
-            p.BeginOutputReadLine();
-
-            Debug("Spawned child process with id {0}", p.Id);
-            return p;
-        }
-
-        private static void WaitForProcess(int pid)
-        {
-            var serverManager = new ServerManager();
-            Process process = null;
-            do
-            {
-                Debug("Waiting for process with PID {0}", pid);
-                try {
-                    process = Process.GetProcessById(pid);
-                    System.Threading.Thread.Sleep(CHECK_DELAY_MS);
-                }
-                catch (Exception)
-                {
-                    process = null;
-                }
-            } while (process != null);
-            Debug("Process with PID {0} no longer running", pid);
-        }
-
         private static void StopSite(string siteName)
         {
             var serverManager = new ServerManager();
@@ -178,10 +139,7 @@ namespace iisprocess
                             throw new ArgumentException("identity");
                         }   
                     }
-            },
-            { "w|watch=",  "watch the process with PID specified", 
-              (int v) => parentPID = v }
-			};
+            }};
 
 			try
 			{
@@ -205,13 +163,6 @@ namespace iisprocess
                 return;
             }
 
-            if (parentPID > 0)
-            {
-                WaitForProcess(parentPID);
-                StopSite(siteName);
-                return;
-            }
-
             if (port < 0)
             {
                 p.WriteOptionDescriptions(Console.Out);
@@ -221,7 +172,6 @@ namespace iisprocess
             string currentPath = Directory.GetCurrentDirectory();
 
 	        _newSite = CreateSite(siteName, framework, currentPath, port, identityType);
-            SpawnChildProcess(Process.GetCurrentProcess().Id, siteName);
             WatchSite(_newSite);
 		}
 	}
