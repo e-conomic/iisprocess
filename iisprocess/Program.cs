@@ -1,7 +1,9 @@
 ﻿using System;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Runtime.InteropServices;
+using System.Web;
 using Mono.Options;
 using Microsoft.Web.Administration;
 using System.Diagnostics;
@@ -105,6 +107,43 @@ namespace iisprocess
 			} while (true);
         }
 
+        private static bool Warmup(int port, string wu)
+        {
+            try
+            {
+                var uri = String.Format("http://localhost:{0}{1}", port, wu);
+                Debug("Performing warmup at {0}", uri);
+                var getRequest = (HttpWebRequest) WebRequest.Create(uri);
+                getRequest.Timeout = 3*60*1000;
+                var resp = (HttpWebResponse) getRequest.GetResponse();
+                if (resp.StatusCode == HttpStatusCode.OK)
+                {
+                    Debug("Warmup ok");
+                    return true;
+                }
+
+                Console.Error.WriteLine("Received failure code during warmup: {0}", resp.StatusCode);
+
+                var stream = resp.GetResponseStream();
+                var reader = new StreamReader(stream);
+
+                var s = "";
+
+                while (s != null)
+                {
+                    s = reader.ReadLine();
+                    if (s != null)
+                        Debug(s);
+                }
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine("Error: {0}", e);
+            }
+
+            return false;
+        }
+
         static void Main(string[] args)
 		{
 			SetConsoleCtrlHandler(ConsoleCtrlCheck, true);
@@ -114,12 +153,14 @@ namespace iisprocess
 			var framework = "v4.0";
 			var showHelp = false;
             var stop = false;
-            var parentPID = -1;
             var identityType = ProcessModelIdentityType.ApplicationPoolIdentity;
+            string warmupURL = null;
 
-			var p = new OptionSet {
+            var p = new OptionSet {
             { "n|name=", "name of the IIS site",
               v => siteName = v},
+            { "w|warmup=", "The URL to use for warmup (without host & port)",
+              v => warmupURL = v},
             { "s|stop", "stop the IIS site",
               v => stop = true},
             { "p|port=", "port used by the iis site",
@@ -145,12 +186,12 @@ namespace iisprocess
 			{
 				p.Parse(args);
 			}
-			catch (Exception e)
+			catch (Exception)
 			{
 				p.WriteOptionDescriptions(Console.Out);
 				return;
 			}
-
+      
 			if (showHelp || siteName == "")
 			{
 				p.WriteOptionDescriptions(Console.Out);
@@ -172,6 +213,14 @@ namespace iisprocess
             string currentPath = Directory.GetCurrentDirectory();
 
 	        _newSite = CreateSite(siteName, framework, currentPath, port, identityType);
+            if (warmupURL != null)
+            {
+                if (!Warmup(port, warmupURL))
+                {
+                    StopSite(siteName);
+                    Environment.Exit(1);
+                }
+            }
             WatchSite(_newSite);
 		}
 	}
