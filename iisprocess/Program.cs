@@ -155,6 +155,7 @@ namespace iisprocess
             var stop = false;
             var identityType = ProcessModelIdentityType.ApplicationPoolIdentity;
             string warmupURL = null;
+            var waitForSiteToStop = true;
 
             var p = new OptionSet {
             { "n|name=", "name of the IIS site",
@@ -171,6 +172,8 @@ namespace iisprocess
               v => showHelp = true },
             { "d|debug",  "output debug messages", 
               v => debug = true },
+            { "x|exit",  "exit without waiting for the site to stop (but after warmup", 
+              v => waitForSiteToStop = false },
             { "i|identity=",  "The IdentityType to use for Application pool",
                 i =>
                     {
@@ -221,7 +224,12 @@ namespace iisprocess
                     Environment.Exit(1);
                 }
             }
-            WatchSite(_newSite);
+
+            if (waitForSiteToStop)
+            {
+                WatchSite(_newSite);
+            }
+            Environment.Exit(0);
 		}
 	}
 }
