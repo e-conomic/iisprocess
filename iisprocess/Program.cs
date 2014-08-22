@@ -60,6 +60,7 @@ namespace iisprocess
             applicationPool.ManagedRuntimeVersion = framework;
             applicationPool.Enable32BitAppOnWin64 = true;
             applicationPool.ProcessModel.IdentityType = identityType;
+            applicationPool.ProcessModel.IdleTimeout = new TimeSpan(7,0,0);
 
             if (serverManager.Sites.Any(si => si.Name == siteName)) {
                 Debug("Removing existing site {0}", siteName);
