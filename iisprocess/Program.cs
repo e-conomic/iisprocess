@@ -3,7 +3,6 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Runtime.InteropServices;
-using System.Web;
 using Mono.Options;
 using Microsoft.Web.Administration;
 using System.Diagnostics;
@@ -62,20 +61,30 @@ namespace iisprocess
             applicationPool.ProcessModel.IdentityType = identityType;
             applicationPool.ProcessModel.IdleTimeout = new TimeSpan(7,0,0);
 
-            if (serverManager.Sites.Any(si => si.Name == siteName)) {
-                Debug("Removing existing site {0}", siteName);
-                serverManager.Sites.Remove(serverManager.Sites.Single(si => si.Name == siteName));
-            }
-            Debug("Creating new Site {0}, Path={1}, Port={2}", siteName, path, port);
 
-            var newSite = serverManager.Sites.Add(siteName, path, port);
-            newSite.ServerAutoStart = true;
-            newSite.Applications[0].ApplicationPoolName = siteName;
+            /** Try to preserve the site so any external settings (such as log formats etc) are preserved */
+            Site site;
+
+            if (serverManager.Sites.Any(si => si.Name == siteName))
+            {
+                Debug("Found existing site {0}, updating port={1} and path={2}", siteName, port, path);
+                site = serverManager.Sites.Single(si => si.Name == siteName);
+                site.Bindings[0].BindingInformation = String.Format("*:{0}:*", port);
+                site.Applications[0].VirtualDirectories["/"].PhysicalPath = path;
+            }
+            else
+            {
+                Debug("Creating new Site {0}, Path={1}, Port={2}", siteName, path, port);
+                site = serverManager.Sites.Add(siteName, path, port);
+            }
+
+            site.ServerAutoStart = true;
+            site.Applications[0].ApplicationPoolName = siteName;
             serverManager.CommitChanges();
             System.Threading.Thread.Sleep(500);
             Debug("Starting site");
-            newSite.Start();
-            return newSite;
+            site.Start();
+            return site;
         }
 
         private static void StopSite(string siteName)
