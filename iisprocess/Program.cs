@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Runtime.InteropServices;
 using Mono.Options;
 using Microsoft.Web.Administration;
@@ -58,60 +59,32 @@ namespace iisprocess
             applicationPool.ManagedRuntimeVersion = framework;
             applicationPool.Enable32BitAppOnWin64 = true;
             applicationPool.ProcessModel.IdentityType = identityType;
+            applicationPool.ProcessModel.IdleTimeout = new TimeSpan(7,0,0);
 
-            if (serverManager.Sites.Any(si => si.Name == siteName)) {
-                Debug("Removing existing site {0}", siteName);
-                serverManager.Sites.Remove(serverManager.Sites.Single(si => si.Name == siteName));
+
+            /** Try to preserve the site so any external settings (such as log formats etc) are preserved */
+            Site site;
+
+            if (serverManager.Sites.Any(si => si.Name == siteName))
+            {
+                Debug("Found existing site {0}, updating port={1} and path={2}", siteName, port, path);
+                site = serverManager.Sites.Single(si => si.Name == siteName);
+                site.Bindings[0].BindingInformation = String.Format("*:{0}:*", port);
+                site.Applications[0].VirtualDirectories["/"].PhysicalPath = path;
             }
-            Debug("Creating new Site {0}, Path={1}, Port={2}", siteName, path, port);
+            else
+            {
+                Debug("Creating new Site {0}, Path={1}, Port={2}", siteName, path, port);
+                site = serverManager.Sites.Add(siteName, path, port);
+            }
 
-            var newSite = serverManager.Sites.Add(siteName, path, port);
-            newSite.ServerAutoStart = true;
-            newSite.Applications[0].ApplicationPoolName = siteName;
+            site.ServerAutoStart = true;
+            site.Applications[0].ApplicationPoolName = siteName;
             serverManager.CommitChanges();
             System.Threading.Thread.Sleep(500);
             Debug("Starting site");
-            newSite.Start();
-            return newSite;
-        }
-
-        private static Process SpawnChildProcess(int parentPID, string siteName)
-        {
-            var filename = System.Reflection.Assembly.GetEntryAssembly().Location;
-            var args = String.Format("-w {0} -n {1} {2}", parentPID, siteName, debug ? "-d" : "");
-            Debug("Spawning process: {0} {1}", filename, args);
-            var pinfo = new ProcessStartInfo(filename, args)
-            {
-                CreateNoWindow = true,
-                UseShellExecute = false,
-                RedirectStandardOutput = true
-            };
-
-            var p = Process.Start(pinfo);
-            p.OutputDataReceived += (sender, a) => Console.WriteLine(a.Data);
-            p.BeginOutputReadLine();
-
-            Debug("Spawned child process with id {0}", p.Id);
-            return p;
-        }
-
-        private static void WaitForProcess(int pid)
-        {
-            var serverManager = new ServerManager();
-            Process process = null;
-            do
-            {
-                Debug("Waiting for process with PID {0}", pid);
-                try {
-                    process = Process.GetProcessById(pid);
-                    System.Threading.Thread.Sleep(CHECK_DELAY_MS);
-                }
-                catch (Exception)
-                {
-                    process = null;
-                }
-            } while (process != null);
-            Debug("Process with PID {0} no longer running", pid);
+            site.Start();
+            return site;
         }
 
         private static void StopSite(string siteName)
@@ -144,6 +117,43 @@ namespace iisprocess
 			} while (true);
         }
 
+        private static bool Warmup(int port, string wu)
+        {
+            try
+            {
+                var uri = String.Format("http://localhost:{0}{1}", port, wu);
+                Debug("Performing warmup at {0}", uri);
+                var getRequest = (HttpWebRequest) WebRequest.Create(uri);
+                getRequest.Timeout = 3*60*1000;
+                var resp = (HttpWebResponse) getRequest.GetResponse();
+                if (resp.StatusCode == HttpStatusCode.OK)
+                {
+                    Debug("Warmup ok");
+                    return true;
+                }
+
+                Console.Error.WriteLine("Received failure code during warmup: {0}", resp.StatusCode);
+
+                var stream = resp.GetResponseStream();
+                var reader = new StreamReader(stream);
+
+                var s = "";
+
+                while (s != null)
+                {
+                    s = reader.ReadLine();
+                    if (s != null)
+                        Debug(s);
+                }
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine("Error: {0}", e);
+            }
+
+            return false;
+        }
+
         static void Main(string[] args)
 		{
 			SetConsoleCtrlHandler(ConsoleCtrlCheck, true);
@@ -153,12 +163,15 @@ namespace iisprocess
 			var framework = "v4.0";
 			var showHelp = false;
             var stop = false;
-            var parentPID = -1;
             var identityType = ProcessModelIdentityType.ApplicationPoolIdentity;
+            string warmupURL = null;
+            var waitForSiteToStop = true;
 
-			var p = new OptionSet {
+            var p = new OptionSet {
             { "n|name=", "name of the IIS site",
               v => siteName = v},
+            { "w|warmup=", "The URL to use for warmup (without host & port)",
+              v => warmupURL = v},
             { "s|stop", "stop the IIS site",
               v => stop = true},
             { "p|port=", "port used by the iis site",
@@ -169,6 +182,8 @@ namespace iisprocess
               v => showHelp = true },
             { "d|debug",  "output debug messages", 
               v => debug = true },
+            { "x|exit",  "exit without waiting for the site to stop (but after warmup", 
+              v => waitForSiteToStop = false },
             { "i|identity=",  "The IdentityType to use for Application pool",
                 i =>
                     {
@@ -178,21 +193,18 @@ namespace iisprocess
                             throw new ArgumentException("identity");
                         }   
                     }
-            },
-            { "w|watch=",  "watch the process with PID specified", 
-              (int v) => parentPID = v }
-			};
+            }};
 
 			try
 			{
 				p.Parse(args);
 			}
-			catch (Exception e)
+			catch (Exception)
 			{
 				p.WriteOptionDescriptions(Console.Out);
 				return;
 			}
-
+      
 			if (showHelp || siteName == "")
 			{
 				p.WriteOptionDescriptions(Console.Out);
@@ -201,13 +213,6 @@ namespace iisprocess
 
             if (stop)
             {
-                StopSite(siteName);
-                return;
-            }
-
-            if (parentPID > 0)
-            {
-                WaitForProcess(parentPID);
                 StopSite(siteName);
                 return;
             }
@@ -221,8 +226,20 @@ namespace iisprocess
             string currentPath = Directory.GetCurrentDirectory();
 
 	        _newSite = CreateSite(siteName, framework, currentPath, port, identityType);
-            SpawnChildProcess(Process.GetCurrentProcess().Id, siteName);
-            WatchSite(_newSite);
+            if (warmupURL != null)
+            {
+                if (!Warmup(port, warmupURL))
+                {
+                    StopSite(siteName);
+                    Environment.Exit(1);
+                }
+            }
+
+            if (waitForSiteToStop)
+            {
+                WatchSite(_newSite);
+            }
+            Environment.Exit(0);
 		}
 	}
 }
